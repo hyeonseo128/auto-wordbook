@@ -815,6 +815,49 @@
 
     .btn-del:hover { border-color: var(--red); color: var(--red); }
 
+    /* 다운로드 버튼 */
+    .btn-download {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 6px 10px;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+
+    .btn-download:hover { background: var(--accent); color: #0f0f13; }
+
+    /* 가져오기(import) 영역 */
+    .import-zone {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .import-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 18px;
+      background: var(--surface2);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-dim);
+      font-family: 'Noto Sans KR', sans-serif;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: var(--transition);
+      flex: 1;
+      justify-content: center;
+    }
+
+    .import-label:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* 파일 input은 숨김 처리 */
+    #importFileInput { display: none; }
+
     /* 저장 없을 때 */
     .save-empty {
       text-align: center;
@@ -895,14 +938,13 @@
       <div class="prompt-box" id="aiPromptBox">이 이미지는 영어 단어장입니다. 단어 목록을 CSV 형식으로 변환해 주세요.
 
 규칙:
-- 위 단어 번호, 영어 단어, 단어 뜻 이 적혀있는 단어장 이미지에서 단어를 추출해줘.
 - 따옴표(", ') 없이 작성
 - 한 줄에 하나의 단어
 - 순서: 번호, 영어 단어, 단어 뜻
 - 예시: 1, apple, 사과
-- 번호는 단어장에 적혀있는 숫자에서 작은 숫자부터 순서대로
-- 뜻이 여러 개이면 ;으로 이어서 작성 (예: 1, run, 달리다; 운영하다)
-- 설명, 머리말, 코드블록 없이 CSV 데이터 형식의 텍스트만 출력</div>
+- 번호는 1부터 순서대로
+- 뜻이 여러 개이면 쉼표로 이어서 작성 (예: 1, run, 달리다, 운영하다)
+- 설명, 머리말, 코드블록 없이 CSV 데이터만 출력</div>
       <button class="btn btn-copy" id="copyPromptBtn">📋 프롬프트 복사하기</button>
     </div>
   </section>
@@ -1043,6 +1085,21 @@
       <div class="save-empty" id="saveEmpty">
         <div class="save-empty-icon">📂</div>
         <p>저장된 단어장이 없습니다.</p>
+      </div>
+    </div>
+
+    <!-- 파일로 가져오기 -->
+    <div class="card">
+      <div class="card-title">📥 파일에서 가져오기</div>
+      <p class="add-hint" style="margin-bottom:12px;">
+        다른 기기에서 다운로드한 <strong style="color:var(--text)">.json 파일</strong>을 선택하면<br/>
+        저장 목록에 바로 추가됩니다.
+      </p>
+      <div class="import-zone">
+        <label class="import-label" for="importFileInput">
+          📂 JSON 파일 선택하기
+        </label>
+        <input type="file" id="importFileInput" accept=".json" />
       </div>
     </div>
 
@@ -1611,8 +1668,9 @@ function renderSaveList() {
         </div>
       </div>
       <div class="save-actions">
-        <button class="btn btn-load" data-id="${s.saveId}">불러오기</button>
-        <button class="btn btn-del"  data-id="${s.saveId}">✕</button>
+        <button class="btn btn-load"     data-id="${s.saveId}">불러오기</button>
+        <button class="btn btn-download" data-id="${s.saveId}" title="JSON 파일로 다운로드">⬇</button>
+        <button class="btn btn-del"      data-id="${s.saveId}" title="삭제">✕</button>
       </div>
     `;
     listEl.appendChild(item);
@@ -1623,11 +1681,91 @@ function renderSaveList() {
     btn.addEventListener('click', () => loadSave(btn.dataset.id));
   });
 
+  // 다운로드 버튼 이벤트
+  listEl.querySelectorAll('.btn-download').forEach(btn => {
+    btn.addEventListener('click', () => downloadSave(btn.dataset.id));
+  });
+
   // 삭제 버튼 이벤트
   listEl.querySelectorAll('.btn-del').forEach(btn => {
     btn.addEventListener('click', () => deleteSave(btn.dataset.id));
   });
 }
+
+// 단어장을 JSON 파일로 다운로드
+function downloadSave(saveId) {
+  const saves  = loadSaves();
+  const target = saves.find(s => s.saveId === saveId);
+  if (!target) return;
+
+  // JSON 직렬화 → Blob → 임시 <a> 클릭으로 다운로드
+  const json     = JSON.stringify(target, null, 2); // 들여쓰기 포함, 사람이 읽기 좋게
+  const blob     = new Blob([json], { type: 'application/json' });
+  const url      = URL.createObjectURL(blob);
+  const a        = document.createElement('a');
+
+  // 파일명: 단어장이름_날짜.json (공백→언더스코어, 특수문자 제거)
+  const safeName = target.name.replace(/[^\w가-힣]/g, '_');
+  const dateTag  = target.date.slice(0, 10); // YYYY-MM-DD
+  a.href         = url;
+  a.download     = `${safeName}_${dateTag}.json`;
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url); // 메모리 해제
+
+  showToast(`⬇ "${target.name}" 파일을 다운로드했습니다.`);
+}
+
+// JSON 파일을 읽어 저장 목록에 가져오기
+document.getElementById('importFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // JSON 파일만 허용
+  if (!file.name.endsWith('.json')) {
+    showToast('⚠ .json 파일만 가져올 수 있습니다.', true);
+    e.target.value = ''; // input 초기화
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+
+      // 필수 필드 검증 (saveId, name, date, words 배열)
+      if (!imported.saveId || !imported.name || !Array.isArray(imported.words)) {
+        throw new Error('형식 오류');
+      }
+
+      const saves = loadSaves();
+
+      // 동일 saveId가 이미 있으면 덮어쓸지 물어보기
+      const dupIdx = saves.findIndex(s => s.saveId === imported.saveId);
+      if (dupIdx !== -1) {
+        if (!confirm(`"${imported.name}" 단어장이 이미 있습니다.\n덮어쓸까요?`)) {
+          e.target.value = '';
+          return;
+        }
+        saves[dupIdx] = imported; // 덮어쓰기
+      } else {
+        saves.push(imported); // 신규 추가
+      }
+
+      saveSaves(saves);
+      renderSaveList();
+      showToast(`📥 "${imported.name}" 단어장을 가져왔습니다! (${imported.words.length}개)`);
+    } catch {
+      showToast('⚠ 올바른 단어장 파일이 아닙니다.', true);
+    }
+
+    e.target.value = ''; // input 초기화 (같은 파일 재선택 가능하도록)
+  };
+
+  reader.readAsText(file, 'utf-8');
+});
 
 // 현재 단어장을 저장하기
 document.getElementById('saveNowBtn').addEventListener('click', () => {
